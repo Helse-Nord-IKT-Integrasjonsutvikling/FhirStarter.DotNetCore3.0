@@ -13,7 +13,7 @@ namespace FhirStarter.R4.Detonator.DotNetCore3.Interface
         Base Create(IKey key, Resource resource);
         Base Read(SearchParams searchParams);
         Base Read(string id);
-        Task<Tuple<Base, bool>> UpdateAsync(IKey key, Resource resource);
+        Task<(Base resource, bool created)> UpdateAsync(IKey key, Resource resource);
         ActionResult Delete(IKey key);
         ActionResult Patch(IKey key, Resource resource);
     }
