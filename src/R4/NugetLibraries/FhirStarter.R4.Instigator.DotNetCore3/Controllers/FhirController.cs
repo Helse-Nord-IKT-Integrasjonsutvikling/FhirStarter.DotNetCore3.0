@@ -1,7 +1,6 @@
 ﻿using System;
 using System.Linq;
 using System.Net;
-using System.Net.Http;
 using System.Text.Encodings.Web;
 using System.Threading.Tasks;
 using FhirStarter.R4.Detonator.DotNetCore3.Interface;
@@ -52,26 +51,20 @@ namespace FhirStarter.R4.Instigator.DotNetCore3.Controllers
 
         private Base HandleValidation(Base result)
         {
-            var validation = _profileValidator.Validate((Resource) result);
-            if (!validation.Success)
+            var validation = _profileValidator.Validate((Resource)result);
+            if (validation.Success) return result;
+            if (!_returnValidatedResource) return validation;
+            var xmlString = new FhirXmlSerializer().SerializeToDocument(result).ToString();
+            var htmlEncoder = HtmlEncoder.Create(new TextEncoderSettings());
+            var htmlEncodedString = htmlEncoder.Encode(xmlString);
+
+            validation.Text = new Narrative
             {
-                if (_returnValidatedResource)
-                {
-                    var xmlString = new FhirXmlSerializer().SerializeToDocument(result).ToString();
-                    var htmlEncoder = HtmlEncoder.Create(new TextEncoderSettings());
-                    var htmlEncodedString = htmlEncoder.Encode(xmlString);
+                Status = Narrative.NarrativeStatus.Generated,
+                Div = htmlEncodedString
+            };
 
-                    validation.Text = new Narrative
-                    {
-                        Status = Narrative.NarrativeStatus.Generated,
-                        Div = htmlEncodedString
-                    };
-                }
-
-                result = validation;
-            }
-
-            return result;
+            return validation;
         }
 
         private ActionResult ResourceCreate(string type, Resource resource, IFhirBaseService service)
@@ -82,7 +75,7 @@ namespace FhirStarter.R4.Instigator.DotNetCore3.Controllers
                 var contentType = Request.ContentType;
                 Response.ContentType = contentType;
             }
-            
+
             if (service == null || string.IsNullOrEmpty(type) || resource == null)
                 return BadRequest($"Service for resource {nameof(resource)} must exist.");
             var key = Key.Create(type);
@@ -104,23 +97,19 @@ namespace FhirStarter.R4.Instigator.DotNetCore3.Controllers
                 throw new ArgumentException("Service is null, cannot update resource of type " + type);
             if (!id.Equals(resource.Id))
                 throw new FhirOperationException(
-                    "Resource id in request body object does not match resource identifier in request url", 
+                    "Resource id in request body object does not match resource identifier in request url",
                     HttpStatusCode.BadRequest);
             var key = Key.Create(type, id);
-            var result = await service.UpdateAsync(key, resource);
-            if (result != null)
+            var (updatedResource, created) = await service.UpdateAsync(key, resource);
+            if (created)
             {
-                if (result.Item2) // Created
-                {
-                    // If created, the resource is accessible with the same url as the PUT request
-                    return Created(Request.GetEncodedUrl(), result.Item1);
-                }
-                else
-                {
-                    return Ok(result.Item1);
-                }
+                // If created, the resource is accessible with the same url as the PUT request
+                return Created(Request.GetEncodedUrl(), updatedResource);
             }
-            return BadRequest($"Service is null, cannot update resource of {type}");
+            else
+            {
+                return Ok(updatedResource);
+            }
         }
 
         public ActionResult ResourceDelete(string type, Key key, IFhirBaseService service)
@@ -161,7 +150,7 @@ namespace FhirStarter.R4.Instigator.DotNetCore3.Controllers
         // return 201 when created
         // return 202 when takes too long
         [HttpPost, Route("{type}")]
-        public ActionResult Create(string type,[FromBody] Resource resource)
+        public ActionResult Create(string type, [FromBody] Resource resource)
         {
             if (_validationEnabled)
             {
@@ -209,7 +198,7 @@ namespace FhirStarter.R4.Instigator.DotNetCore3.Controllers
         // return 201 when created
         // return 202 when takes too long
         [HttpPatch, Route("{type}/{id}")]
-        public ActionResult Patch(string type, string id, [FromBody]Resource resource)
+        public ActionResult Patch(string type, string id, [FromBody] Resource resource)
         {
             var service = ControllerHelper.GetFhirService(type, HttpContext.RequestServices);
             if (service != null)

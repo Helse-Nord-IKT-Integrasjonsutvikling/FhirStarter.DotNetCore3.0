@@ -9,7 +9,7 @@ using static System.Net.HttpStatusCode;
 
 namespace FhirStarter.R4.Detonator.DotNetCore3.Filter
 {
-    public class FhirExceptionFilter:IExceptionFilter
+    public class FhirExceptionFilter : IExceptionFilter
     {
         private readonly ILogger<FhirExceptionFilter> _logger;
 
@@ -21,20 +21,27 @@ namespace FhirStarter.R4.Detonator.DotNetCore3.Filter
         {
             _logger.LogError(context.Exception, context.Exception.Message);
             var operationOutCome = new OperationOutcome { Issue = new List<OperationOutcome.IssueComponent>() };
+            
             var issueCode = OperationOutcome.IssueType.Exception;
             try
             {
-                var ex = context.Exception as FhirOperationException;
-                issueCode = ex.Status switch
+                if (context.Exception is FhirOperationException exception)
                 {
-                    NotFound => OperationOutcome.IssueType.NotFound,
-                    BadRequest => OperationOutcome.IssueType.Incomplete,
-                    _ => issueCode
-                };
+                    issueCode = exception.Status switch
+                    {
+                        NotFound => OperationOutcome.IssueType.NotFound,
+                        BadRequest => OperationOutcome.IssueType.Incomplete,
+                        _ => issueCode
+                    };
+                }
+                else
+                {
+                    _logger.LogDebug("Exception was probably not a HttpException");
+                }
             }
-            catch (Exception e)
+            catch (Exception exception)
             {
-                _logger.LogDebug("Exception was not a FhirOperationException");
+                _logger.LogDebug($"Exception was probably not a FhirOperationException: {exception}");
             }
 
             var issue = new OperationOutcome.IssueComponent
@@ -48,7 +55,6 @@ namespace FhirStarter.R4.Detonator.DotNetCore3.Filter
             operationOutCome.Issue.Add(issue);
             context.Result = new ObjectResult(operationOutCome);
             context.ExceptionHandled = true;
-            
         }
     }
 }

@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using FhirStarter.R4.Detonator.DotNetCore3.Interface;
 using FhirStarter.R4.Detonator.DotNetCore3.SparkEngine.Core;
 using Hl7.Fhir.Model;
@@ -48,7 +49,7 @@ namespace FhirStarter.R4.Twisted.DotNetCore3.Services
             return patient;
         }
 
-        public ActionResult Update(IKey key, Resource resource)
+        public Task<(Base resource, bool created)> UpdateAsync(IKey key, Resource resource)
         {
             throw new NotImplementedException();
         }
